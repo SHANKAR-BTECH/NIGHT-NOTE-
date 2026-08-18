@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Glowing Sun Sphere in the center -->
+    <path
+        android:fillColor="#FFC107"
+        android:pathData="M54,42 A14,14 0 1,1 53.99,42 Z" />
+
+    <!-- Outer Golden Crescent Moon cradling the Sun -->
+    <path
+        android:fillColor="#FF9800"
+        android:pathData="M32,46 C32,64 45,76 62,76 C70,76 77,72 81,65 C71,72 57,71 48,63 C40,55 38,43 43,33 C36,36 32,41 32,46 Z" />
+
+    <!-- Inner Crescent Accent Glow -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M36,48 C36,62 47,72 61,72 C67,72 73,69 77,64 C69,69 57,68 49,61 C42,54 40,44 44,36 C39,39 36,43 36,48 Z" />
+
+    <!-- Top Sparkling Checkmark -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,32 L54,38 L68,22 L65,20 L54,34 L50,30 Z" />
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M50,30 L54,34 L52,36 L48,32 Z" />
+
+    <!-- Center Top Star -->
+    <path
+        android:fillColor="#FFD54F"
+        android:pathData="M58,16 L59.5,19.5 L63,21 L59.5,22.5 L58,26 L56.5,22.5 L53,21 L56.5,19.5 Z" />
+
+    <!-- Tiny Sparkles -->
+    <path
+        android:fillColor="#FFECB3"
+        android:pathData="M66,13 L67,15 L69,16 L67,17 L66,19 L65,17 L63,16 L65,15 Z" />
+    <path
+        android:fillColor="#FFECB3"
+        android:pathData="M46,22 L46.7,23.3 L48,24 L46.7,24.7 L46,26 L45.3,24.7 L44,24 L45.3,23.3 Z" />
+</vector>

@@ -1,0 +1,57 @@
+# Node & Dependencies
+node_modules/
+package-lock.json.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+
+# Large Model Files (Do NOT commit on-device GGUF weights)
+*.gguf
+
+# Android & Gradle artifacts
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+android/app/src/main/assets/public/
+android/capacitor-cordova-android-plugins/build/
+local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# IDE & Editor caches
+.idea/
+android/.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+
+# Internal IDE / scratch artifacts
+.artifacts/
+.figma/
+logs/
+*.log
