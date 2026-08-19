@@ -976,11 +976,32 @@ function SmartTrimModal({
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '13px', color: day.text, fontWeight: 600, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <p style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        fontSize: '13px',
+                        color: day.text,
+                        fontWeight: 600,
+                        margin: 0,
+                        whiteSpace: 'normal',
+                        overflow: 'visible',
+                        textOverflow: 'clip',
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
+                        lineHeight: 1.4,
+                      }}>
                         {t.text}
                       </p>
                       {t.description && (
-                        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '11px', color: day.textDim, margin: '2px 0 0' }}>
+                        <p style={{
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontSize: '11px',
+                          color: day.textDim,
+                          margin: '3px 0 0',
+                          whiteSpace: 'normal',
+                          overflowWrap: 'anywhere',
+                          wordBreak: 'break-word',
+                          lineHeight: 1.3,
+                        }}>
                           {t.description}
                         </p>
                       )}
@@ -1521,7 +1542,7 @@ function TaskCard({
         borderRadius: '16px',
         padding: isCollapsing ? '0 16px' : '14px 16px',
         marginBottom: isCollapsing ? '0' : '0',
-        maxHeight: isCollapsing ? '0' : '120px',
+        maxHeight: isCollapsing ? '0' : 'none',
         opacity: localDone ? 0.6 : isDragging ? 0.4 : 1,
         transform: isDragging ? 'scale(1.02) translateY(-2px)' : pressed ? 'scale(0.98)' : 'scale(1)',
         boxShadow: isDragging ? `0 8px 24px ${s.dot}33` : '0 2px 8px rgba(0,0,0,0.03)',
@@ -1530,7 +1551,7 @@ function TaskCard({
         alignItems: 'center',
         gap: '10px',
         overflow: 'hidden',
-        transition: 'padding 0.3s, max-height 0.3s, opacity 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s',
+        transition: 'padding 0.3s, opacity 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s',
         animation: isCompleting ? 'taskCompleteFlash 0.5s ease forwards' : undefined,
         userSelect: 'none',
       } as React.CSSProperties}
@@ -1597,29 +1618,32 @@ function TaskCard({
         <p style={{
           fontFamily: "'DM Sans', sans-serif", fontWeight: 500, fontSize: '15px',
           color: day.text,
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          position: 'relative',
-          display: 'inline-block',
-          maxWidth: '100%'
+          whiteSpace: 'normal',
+          overflow: 'visible',
+          textOverflow: 'clip',
+          overflowWrap: 'anywhere',
+          wordBreak: 'break-word',
+          lineHeight: 1.4,
+          margin: 0,
+          textDecoration: localDone ? 'line-through' : 'none',
+          textDecorationColor: day.textDim,
         }}>
           {task.text}
-          {localDone && (
-            <span style={{
-              position: 'absolute',
-              top: '50%',
-              left: 0,
-              width: '100%',
-              height: '1.5px',
-              background: day.textDim,
-              transformOrigin: 'left',
-              animation: 'strikeDraw 0.3s ease-out forwards',
-            }} />
-          )}
         </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', color: day.textDim, fontFamily: "'DM Sans', sans-serif" }}>
             ⏱ {task.duration}
           </span>
+          {task.deadline && (
+            <span style={{ fontSize: '11px', color: day.accent, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>
+              📅 {task.deadline}
+            </span>
+          )}
+          {task.category && (
+            <span style={{ fontSize: '10px', color: day.textDim, fontFamily: "'Outfit', sans-serif", background: 'rgba(0,0,0,0.04)', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 600 }}>
+              {task.category}
+            </span>
+          )}
         </div>
       </div>
 
