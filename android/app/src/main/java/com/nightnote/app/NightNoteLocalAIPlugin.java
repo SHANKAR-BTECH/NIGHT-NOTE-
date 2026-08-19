@@ -34,6 +34,12 @@ public class NightNoteLocalAIPlugin extends Plugin {
     public void load() {
         inference.init();
         updateInitialStatus();
+        // If not installed yet, auto-extract bundled asset in background
+        File modelDir = new File(getContext().getFilesDir(), "models");
+        File modelFile = new File(modelDir, "nightnote-lite-smollm2-135m-v2-q5_k_m.gguf");
+        if (!modelFile.exists()) {
+            copyAssetModelInternal(null);
+        }
     }
 
     private void updateInitialStatus() {
@@ -42,12 +48,10 @@ public class NightNoteLocalAIPlugin extends Plugin {
             return;
         }
 
-        // We check for the specific Lite V2 model defined in our config
-        // This ensures we don't accidentally report READY if only an old Q5 model is present
         File modelDir = new File(getContext().getFilesDir(), "models");
         File modelFile = new File(modelDir, "nightnote-lite-smollm2-135m-v2-q5_k_m.gguf");
         
-        if (modelFile.exists()) {
+        if (modelFile.exists() && modelFile.length() > 50 * 1024 * 1024) {
             currentStatus = "MODEL_READY";
         } else {
             currentStatus = "MODEL_NOT_INSTALLED";
@@ -69,7 +73,107 @@ public class NightNoteLocalAIPlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("status", currentStatus);
         ret.put("progress", currentProgress);
+        File modelDir = new File(getContext().getFilesDir(), "models");
+        File modelFile = new File(modelDir, "nightnote-lite-smollm2-135m-v2-q5_k_m.gguf");
+        ret.put("path", modelFile.getAbsolutePath());
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void extractBundledModel(PluginCall call) {
+        copyAssetModelInternal(call);
+    }
+
+    private void copyAssetModelInternal(PluginCall call) {
+        if (isDownloading.get()) {
+            if (call != null) call.reject("Extraction already in progress");
+            return;
+        }
+
+        File modelDir = new File(getContext().getFilesDir(), "models");
+        File targetFile = new File(modelDir, "nightnote-lite-smollm2-135m-v2-q5_k_m.gguf");
+        
+        // Re-use if already present and valid
+        if (targetFile.exists() && targetFile.length() > 100 * 1024 * 1024) {
+            currentStatus = "MODEL_READY";
+            currentProgress = 100;
+            setStatus("MODEL_READY", "Model ready on device");
+            if (call != null) {
+                JSObject ret = new JSObject();
+                ret.put("success", true);
+                ret.put("path", targetFile.getAbsolutePath());
+                call.resolve(ret);
+            }
+            return;
+        }
+
+        isDownloading.set(true);
+        cancelDownloadRequested.set(false);
+        setStatus("MODEL_DOWNLOADING", "Preparing local AI model from assets...");
+        if (call != null) call.resolve();
+
+        executor.execute(() -> {
+            try {
+                modelDir.mkdirs();
+                File partFile = new File(targetFile.getAbsolutePath() + ".part");
+                if (partFile.exists()) partFile.delete();
+
+                String assetPath = "models/nightnote-lite-smollm2-135m-v2-q5_k_m.gguf";
+                try (InputStream is = getContext().getAssets().open(assetPath);
+                     OutputStream os = new FileOutputStream(partFile)) {
+
+                    long totalSize = getContext().getAssets().openFd(assetPath).getLength();
+                    if (totalSize <= 0) totalSize = 106910000L; // approx size fallback
+
+                    byte[] buffer = new byte[1024 * 64];
+                    int bytesRead;
+                    long currentTotal = 0;
+
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        if (cancelDownloadRequested.get()) break;
+                        os.write(buffer, 0, bytesRead);
+                        currentTotal += bytesRead;
+
+                        int progress = (int) (currentTotal * 100 / totalSize);
+                        if (progress != currentProgress) {
+                            currentProgress = progress;
+                            JSObject p = new JSObject();
+                            p.put("progress", progress);
+                            notifyListeners("modelDownloadProgress", p);
+                        }
+                    }
+                }
+
+                if (cancelDownloadRequested.get()) {
+                    partFile.delete();
+                    setStatus("MODEL_NOT_INSTALLED", "Extraction cancelled");
+                    return;
+                }
+
+                setStatus("MODEL_VERIFYING", "Verifying local model integrity...");
+                String expectedSha256 = "34a278346df6c4d0645fb0ae5c961daf2115b35da77b011c9fdd169005c07d6c";
+                if (!verifySha256(partFile, expectedSha256)) {
+                    partFile.delete();
+                    setStatus("MODEL_ERROR", "SHA-256 integrity check failed");
+                    return;
+                }
+
+                if (targetFile.exists()) targetFile.delete();
+                if (!partFile.renameTo(targetFile)) {
+                    throw new Exception("Failed to rename temporary model file");
+                }
+
+                currentProgress = 100;
+                setStatus("MODEL_READY", "NightNote Lite model ready");
+                Log.i(TAG, "Bundled model extracted successfully to " + targetFile.getAbsolutePath());
+
+            } catch (Exception e) {
+                Log.e(TAG, "Asset copy error: " + e.getMessage());
+                setStatus("MODEL_ERROR", e.getMessage());
+            } finally {
+                isDownloading.set(false);
+            }
+        });
     }
 
     @PluginMethod
@@ -238,20 +342,27 @@ public class NightNoteLocalAIPlugin extends Plugin {
     @PluginMethod
     public void loadModel(PluginCall call) {
         String path = call.getString("path");
-        if (path == null) {
-            call.reject("Model path is required");
+        File modelFile = null;
+        if (path != null) {
+            modelFile = new File(path);
+        }
+        if (modelFile == null || !modelFile.exists()) {
+            File fallback = new File(new File(getContext().getFilesDir(), "models"), "nightnote-lite-smollm2-135m-v2-q5_k_m.gguf");
+            if (fallback.exists()) {
+                modelFile = fallback;
+                path = fallback.getAbsolutePath();
+            }
+        }
+
+        if (modelFile == null || !modelFile.exists()) {
+            call.reject("Model file not found at " + (path != null ? path : "default internal path"));
             return;
         }
 
+        final String finalPath = path;
         executor.execute(() -> {
-            File modelFile = new File(path);
-            if (!modelFile.exists()) {
-                call.reject("Model file not found at " + path);
-                return;
-            }
-
             setStatus("MODEL_LOADING", "Loading into memory...");
-            boolean success = inference.loadModel(path);
+            boolean success = inference.loadModel(finalPath);
             if (success) {
                 setStatus("MODEL_LOADED", "Ready for inference");
                 JSObject ret = new JSObject();
@@ -259,7 +370,7 @@ public class NightNoteLocalAIPlugin extends Plugin {
                 call.resolve(ret);
             } else {
                 setStatus("MODEL_ERROR", "Failed to load model into memory");
-                call.reject("Failed to load model from " + path);
+                call.reject("Failed to load model from " + finalPath);
             }
         });
     }

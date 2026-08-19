@@ -1,6 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
 @import 'tailwindcss';
 
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
 @keyframes floatMoon {
   0%, 100% { transform: translateY(0px) rotate(-2deg); }
   50% { transform: translateY(-10px) rotate(2deg); }

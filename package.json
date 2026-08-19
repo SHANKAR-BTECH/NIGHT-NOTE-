@@ -1,11 +1,12 @@
 {
-  "name": "figma-make-app",
+  "name": "nightnote",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
     "build": "vite build",
+    "lint": "tsc --noEmit",
     "cap": "capacitor",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "format": "oxfmt"
@@ -14,6 +15,7 @@
     "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor/android": "^8.4.2",
     "@capacitor/core": "^8.4.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@supabase/supabase-js": "^2.112.3",
     "express": "^5.2.1",
     "react": "^19.0.0",

@@ -1,5 +1,5 @@
 import NightNoteLocalAI, { ModelStatus } from '../plugins/nightnoteLocalAI';
-import { notifyAIToast } from './customLLMService';
+import { notifyAIToast, isValidTaskText } from './customLLMService';
 import { MODEL_CONFIG } from '../config/modelConfig';
 
 // High-precision prompt tuned for SmolLM2-135M Lite V2: meaning-preserving, structured JSON
@@ -18,9 +18,16 @@ export async function getLocalModelStatus() {
 
 export async function initializeLocalModel() {
   try {
-    const { status } = await getLocalModelStatus();
+    let { status } = await getLocalModelStatus();
 
     if (status === ModelStatus.LOADED) return true;
+
+    if (status === ModelStatus.NOT_INSTALLED) {
+      notifyAIToast('Extracting bundled local AI model...', 'info');
+      await NightNoteLocalAI.extractBundledModel();
+      const updated = await getLocalModelStatus();
+      status = updated.status;
+    }
 
     if (status === ModelStatus.READY) {
       notifyAIToast('Loading local NightNote Lite model...', 'info');
@@ -68,8 +75,12 @@ export function parseModelJSONOutput(raw: string): { tasks: any[] } {
     if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
       const candidate = clean.substring(jsonStart, jsonEnd + 1);
       const parsed = JSON.parse(candidate);
-      if (parsed && Array.isArray(parsed.tasks)) return parsed;
-      if (parsed && (parsed.title || parsed.text)) return { tasks: [parsed] };
+      if (parsed && Array.isArray(parsed.tasks)) {
+        return { tasks: parsed.tasks.filter((t: any) => t && isValidTaskText(t.title || t.text)) };
+      }
+      if (parsed && (parsed.title || parsed.text) && isValidTaskText(parsed.title || parsed.text)) {
+        return { tasks: [parsed] };
+      }
     }
   } catch (e) {
     // Continue to next strategies
@@ -82,7 +93,9 @@ export function parseModelJSONOutput(raw: string): { tasks: any[] } {
     if (arrStart !== -1 && arrEnd !== -1 && arrEnd >= arrStart) {
       const candidate = clean.substring(arrStart, arrEnd + 1);
       const parsed = JSON.parse(candidate);
-      if (Array.isArray(parsed)) return { tasks: parsed };
+      if (Array.isArray(parsed)) {
+        return { tasks: parsed.filter((t: any) => t && isValidTaskText(t.title || t.text)) };
+      }
     }
   } catch (e) {
     // Continue to next strategies
@@ -95,13 +108,15 @@ export function parseModelJSONOutput(raw: string): { tasks: any[] } {
   while ((match = objectRegex.exec(clean)) !== null) {
     try {
       const obj = JSON.parse(match[0]);
-      extracted.push(obj);
+      if (isValidTaskText(obj.title || obj.text)) {
+        extracted.push(obj);
+      }
     } catch (err) {
       // Manual field recovery
       const titleMatch = match[0].match(/"(?:title|text)"\s*:\s*"([^"]+)"/);
       const catMatch = match[0].match(/"category"\s*:\s*"([^"]+)"/);
       const dlMatch = match[0].match(/"deadline"\s*:\s*"([^"]+)"/);
-      if (titleMatch) {
+      if (titleMatch && isValidTaskText(titleMatch[1])) {
         extracted.push({
           title: titleMatch[1],
           category: catMatch ? catMatch[1] : 'OTHER',

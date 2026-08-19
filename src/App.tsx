@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { StatusBar, Style } from '@capacitor/status-bar'
 import NightNoteLocalAI, { ModelStatus } from './plugins/nightnoteLocalAI'
 import {
   generateMission,
@@ -637,6 +638,11 @@ function MissionCompleteModal({
         padding: '24px',
         animation: 'overlayIn 0.35s ease',
       }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onHome()
+        }
+      }}
     >
       <Confetti />
 
@@ -653,6 +659,31 @@ function MissionCompleteModal({
           zIndex: 1,
         }}
       >
+        {/* Close Button */}
+        <button
+          onClick={onHome}
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            border: `1px solid ${day.border}`,
+            background: day.surfaceAlt,
+            color: day.textDim,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 700,
+          }}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
         {/* Trophy */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
           <div
@@ -976,32 +1007,11 @@ function SmartTrimModal({
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{
-                        fontFamily: "'DM Sans', sans-serif",
-                        fontSize: '13px',
-                        color: day.text,
-                        fontWeight: 600,
-                        margin: 0,
-                        whiteSpace: 'normal',
-                        overflow: 'visible',
-                        textOverflow: 'clip',
-                        overflowWrap: 'anywhere',
-                        wordBreak: 'break-word',
-                        lineHeight: 1.4,
-                      }}>
+                      <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '13px', color: day.text, fontWeight: 600, margin: 0, wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.4 }}>
                         {t.text}
                       </p>
                       {t.description && (
-                        <p style={{
-                          fontFamily: "'DM Sans', sans-serif",
-                          fontSize: '11px',
-                          color: day.textDim,
-                          margin: '3px 0 0',
-                          whiteSpace: 'normal',
-                          overflowWrap: 'anywhere',
-                          wordBreak: 'break-word',
-                          lineHeight: 1.3,
-                        }}>
+                        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '11px', color: day.textDim, margin: '2px 0 0' }}>
                           {t.description}
                         </p>
                       )}
@@ -1551,7 +1561,7 @@ function TaskCard({
         alignItems: 'center',
         gap: '10px',
         overflow: 'hidden',
-        transition: 'padding 0.3s, opacity 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s',
+        transition: 'padding 0.3s, max-height 0.3s, opacity 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s',
         animation: isCompleting ? 'taskCompleteFlash 0.5s ease forwards' : undefined,
         userSelect: 'none',
       } as React.CSSProperties}
@@ -1618,32 +1628,31 @@ function TaskCard({
         <p style={{
           fontFamily: "'DM Sans', sans-serif", fontWeight: 500, fontSize: '15px',
           color: day.text,
-          whiteSpace: 'normal',
-          overflow: 'visible',
-          textOverflow: 'clip',
-          overflowWrap: 'anywhere',
           wordBreak: 'break-word',
+          overflowWrap: 'break-word',
           lineHeight: 1.4,
-          margin: 0,
-          textDecoration: localDone ? 'line-through' : 'none',
-          textDecorationColor: day.textDim,
+          position: 'relative',
+          display: 'block',
+          width: '100%'
         }}>
           {task.text}
+          {localDone && (
+            <span style={{
+              position: 'absolute',
+              top: '50%',
+              left: 0,
+              width: '100%',
+              height: '1.5px',
+              background: day.textDim,
+              transformOrigin: 'left',
+              animation: 'strikeDraw 0.3s ease-out forwards',
+            }} />
+          )}
         </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
           <span style={{ fontSize: '11px', color: day.textDim, fontFamily: "'DM Sans', sans-serif" }}>
             ⏱ {task.duration}
           </span>
-          {task.deadline && (
-            <span style={{ fontSize: '11px', color: day.accent, fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>
-              📅 {task.deadline}
-            </span>
-          )}
-          {task.category && (
-            <span style={{ fontSize: '10px', color: day.textDim, fontFamily: "'Outfit', sans-serif", background: 'rgba(0,0,0,0.04)', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 600 }}>
-              {task.category}
-            </span>
-          )}
         </div>
       </div>
 
@@ -1928,20 +1937,24 @@ function MorningMission({
   const [newPriority, setNewPriority] = useState<Priority>('medium')
   const [newDuration, setNewDuration] = useState('30m')
   const [showTrimModal, setShowTrimModal] = useState(false)
-  const completeFiredRef = useRef(false)
+  const initialAllDone = useRef(tasks.length > 0 && tasks.every((t) => t.done))
+  const completeFiredRef = useRef(initialAllDone.current)
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 
-  useEffect(() => {
-    if (tasks.length > 0 && tasks.every((t) => t.done) && !completeFiredRef.current) {
-      completeFiredRef.current = true
-      setTimeout(() => onAllComplete(tasks.length), 500)
-    }
-    if (!tasks.every((t) => t.done)) completeFiredRef.current = false
-  }, [tasks, onAllComplete])
-
-  const toggle = (id: string) =>
-    setTasks((ts) => sortTasksByPriority(ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t))))
+  const toggle = (id: string) => {
+    setTasks((ts) => {
+      const next = sortTasksByPriority(ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)))
+      const allNowDone = next.length > 0 && next.every((t) => t.done)
+      if (allNowDone && !completeFiredRef.current) {
+        completeFiredRef.current = true
+        setTimeout(() => onAllComplete(next.length), 350)
+      } else if (!allNowDone) {
+        completeFiredRef.current = false
+      }
+      return next
+    })
+  }
 
   const handleMoveTaskPriority = useCallback((taskId: string, targetPriority: Priority) => {
     setTasks((prevTasks) => {
@@ -2066,7 +2079,14 @@ function MorningMission({
   ]
 
   return (
-    <div className="flex flex-col flex-1 overflow-y-auto" style={{ background: day.bg, position: 'relative' }}>
+    <div
+      className="flex flex-col flex-1 overflow-y-auto"
+      style={{
+        background: day.bg,
+        position: 'relative',
+        paddingBottom: 'calc(40px + env(safe-area-inset-bottom, 0px))',
+      }}
+    >
       <div className="px-6 py-8">
         {/* Header */}
         <div className="flex items-center gap-2 mb-6">
@@ -2417,7 +2437,7 @@ function AIToastBanner() {
     <div
       style={{
         position: 'absolute',
-        top: '16px',
+        top: 'calc(16px + env(safe-area-inset-top, 0px))',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 999,
@@ -2471,6 +2491,27 @@ export default function App() {
   const [modelStatus, setModelStatus] = useState<ModelStatus>(ModelStatus.LOADING)
   const [modelProgress, setModelProgress] = useState(0)
   const [modelMessage, setModelMessage] = useState<string | undefined>()
+
+  // Synchronize Mobile Status Bar styling and icon visibility
+  useEffect(() => {
+    const syncStatusBar = async () => {
+      try {
+        if (screen === 'night') {
+          await StatusBar.setStyle({ style: Style.Dark })
+          await StatusBar.setBackgroundColor({ color: '#0d1b3e' })
+        } else if (settings.darkTheme) {
+          await StatusBar.setStyle({ style: Style.Dark })
+          await StatusBar.setBackgroundColor({ color: '#0f172a' })
+        } else {
+          await StatusBar.setStyle({ style: Style.Light })
+          await StatusBar.setBackgroundColor({ color: '#f7f4ee' })
+        }
+      } catch {
+        // Handled silently on web/unsupported platforms
+      }
+    }
+    syncStatusBar()
+  }, [screen, settings.darkTheme])
 
   useEffect(() => {
     // Purge any stale legacy cloud credentials/endpoints
@@ -2560,6 +2601,10 @@ export default function App() {
   }, [todayStr, missionCompleteDate])
 
   const handleTabChange = useCallback((s: Screen) => {
+    setShowMissionComplete(false)
+    setShowMissionReady(false)
+    setShowMorningLockedModal(false)
+
     if (s === 'morning') {
       if (!isMorningUnlocked()) {
         setShowMorningLockedModal(true)

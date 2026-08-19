@@ -19,10 +19,11 @@ export interface ModelStatusResult {
 export interface NightNoteLocalAIPlugin {
   getStatus(): Promise<ModelStatusResult>;
   downloadModel(options: { url: string, path: string, sha256: string }): Promise<void>;
+  extractBundledModel(): Promise<{ success?: boolean; path?: string }>;
   cancelDownload(): Promise<void>;
   removeModel(options: { path: string }): Promise<void>;
 
-  loadModel(options: { path: string }): Promise<{ success: boolean }>;
+  loadModel(options?: { path?: string }): Promise<{ success: boolean }>;
   isModelLoaded(): Promise<{ loaded: boolean }>;
   generate(options: { prompt: string }): Promise<{ result: string }>;
   releaseModel(): Promise<void>;
@@ -32,6 +33,8 @@ export interface NightNoteLocalAIPlugin {
   addListener(eventName: 'modelStatusChanged', listenerFunc: (data: ModelStatusResult) => void): Promise<any>;
 }
 
-const NightNoteLocalAI = registerPlugin<NightNoteLocalAIPlugin>('NightNoteLocalAI');
+const NightNoteLocalAI = registerPlugin<NightNoteLocalAIPlugin>('NightNoteLocalAI', {
+  web: () => import('./nightnoteLocalAIWeb').then((m) => new m.NightNoteLocalAIWeb())
+});
 
 export default NightNoteLocalAI;

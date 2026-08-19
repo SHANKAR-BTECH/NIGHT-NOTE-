@@ -12,6 +12,8 @@ export interface TaskItem {
   deadline?: string | null
   urgency?: number
   importance?: number
+  sourceClause?: string
+  sourceText?: string
 }
 
 // ─── Legacy Storage Cleanup ──────────────────────────────────────────────────
@@ -31,7 +33,38 @@ export function cleanupLegacyCredentials() {
   }
 }
 
-// ─── Phase 3: Compound Task Splitting ────────────────────────────────────────
+// ─── Phase 2 & 3: Validation, Action Boundaries & Compound Splitting ─────────
+
+/**
+ * Validates whether a text string contains an actionable semantic payload.
+ * Rejects dangling introductory fragments (e.g. "I want", "I need to", "Tomorrow I")
+ * and pure non-actionable chatter.
+ */
+export function isValidTaskText(text: string): boolean {
+  if (!text || typeof text !== 'string') return false
+  const lower = text.toLowerCase().trim()
+  if (lower.length < 3) return false
+
+  // Reject dangling introductory fragments that lack an action payload
+  const incompleteFragmentRegex = /^(?:i\s+)?(?:want|wants|wanted|need|needs|needed|have|has|had|must|plan|plans|planned|gonna|gotta|wanna|remember|don't\s+forget|then|and\s+also|and|also|tomorrow|tomorrow\s+i|then\s+i|maybe|maybe\s+later|later|soon|next|someday|try|trying|start|starting)(\s+to)?\s*$/i
+  if (incompleteFragmentRegex.test(lower)) {
+    return false
+  }
+
+  // Reject conversational chatter / state-of-being expressions
+  const chatterRegex = /^(?:today|man|boy|girl|phew|damn|wow|omg|gosh|i|i'm|im|just|feeling)\s+(?:today\s+)?(?:was|is|feel|feeling|am)?\s*(?:so\s+)?(?:exhausting|exhausted|tiring|tired|crazy|wild|great|rough|brutal|busy|long|hectic|good|bad|sleepy|chilling|relaxing|done for the day|heading to bed|going to sleep)$/i
+  if (chatterRegex.test(lower)) return false
+
+  const greetingsRegex = /^(?:good\s+night|sleep\s+well|sweet\s+dreams|hello|hi|hey|bye|just\s+chilling|thinking\s+about\s+life)[\s!.]*$/i
+  if (greetingsRegex.test(lower)) return false
+
+  const pastCompletedRegex = /^(?:already\s+finished|already\s+submitted|already\s+done|already\s+paid|paid\s+the\s+.*yesterday|finished\s+my\s+|completed\s+my\s+|went\s+to\s+.*this\s+morning|just\s+finished|already\s+finished\s+everything)$/i
+  if (pastCompletedRegex.test(lower)) return false
+
+  if (/^(?:maybe|later|tomorrow|tonight|yesterday|sometime|nothing|none|n\/a)$/i.test(lower)) return false
+
+  return true
+}
 
 /**
  * Splits user input into separate actionable clauses while protecting common phrases,
@@ -48,7 +81,7 @@ export function splitCompoundActions(input: string): string[] {
     const lines: string[] = []
     for (const raw of rawLines) {
       const trimmed = raw.trim().replace(/^[-*•\d.)\s]+/, '').trim()
-      if (trimmed.length > 0) {
+      if (trimmed.length > 0 && isValidTaskText(trimmed)) {
         lines.push(trimmed)
       }
     }
@@ -58,33 +91,25 @@ export function splitCompoundActions(input: string): string[] {
   }
 
   // Case B: Single line text with potential multi-task clauses
-  // Protect abbreviations, titles, and common conjunction phrases
-  const protections: { regex: RegExp, key: string, val: string }[] = [
-    { regex: /\bDr\.\s*/gi, key: '__PROT_DR__', val: 'Dr. ' },
-    { regex: /\bMr\.\s*/gi, key: '__PROT_MR__', val: 'Mr. ' },
-    { regex: /\bMrs\.\s*/gi, key: '__PROT_MRS__', val: 'Mrs. ' },
-    { regex: /\bMs\.\s*/gi, key: '__PROT_MS__', val: 'Ms. ' },
-    { regex: /\bProf\.\s*/gi, key: '__PROT_PROF__', val: 'Prof. ' },
-    { regex: /\be\.g\.,?\s*/gi, key: '__PROT_EG__', val: 'e.g. ' },
-    { regex: /\bi\.e\.,?\s*/gi, key: '__PROT_IE__', val: 'i.e. ' },
-    { regex: /\bvs\.\s*/gi, key: '__PROT_VS__', val: 'vs. ' },
-    { regex: /\betc\.\s*/gi, key: '__PROT_ETC__', val: 'etc. ' },
-    { regex: /\br\s*&\s*d\b/gi, key: '__PROT_RD__', val: 'R&D' },
-    { regex: /\bai\s*&\s*ml\b/gi, key: '__PROT_AIML__', val: 'AI & ML' },
-    { regex: /\bbread\s+and\s+butter\b/gi, key: '__PROT_BB__', val: 'bread and butter' },
-    { regex: /\bsalt\s+and\s+pepper\b/gi, key: '__PROT_SP__', val: 'salt and pepper' },
-    { regex: /\bmac\s+and\s+cheese\b/gi, key: '__PROT_MC__', val: 'mac and cheese' },
-    { regex: /\bmom\s+and\s+dad\b/gi, key: '__PROT_MD__', val: 'mom and dad' },
-    { regex: /\b2\s+gallons\s+of\s+milk\s*,\s*eggs\s*,\s*(?:and\s+)?bread\b/gi, key: '__PROT_GROC2__', val: '2 gallons of milk, eggs, and bread' },
-    { regex: /\bmilk\s*,\s*eggs\s*,\s*(?:and\s+)?bread\b/gi, key: '__PROT_GROC__', val: 'milk, eggs, and bread' },
-    { regex: /\bmilk\s+eggs\s+bread\s+vegetables\b/gi, key: '__PROT_GROCV__', val: 'milk eggs bread vegetables' },
-    { regex: /\bmilk\s+eggs\s+bread\b/gi, key: '__PROT_GROC3__', val: 'milk eggs bread' },
-    { regex: /\b(?:Chapter|Ch\.?)\s+(\d+)\s+(?:and|&|n)\s+(\d+)\b/gi, key: '__PROT_CHAP__', val: 'Chapter $1 and $2' },
+  const protections: { regex: RegExp; key: string }[] = [
+    { regex: /\bDr\.\s+[A-Z][a-z]+/gi, key: '__PROT_DRNAME__' },
+    { regex: /\b(?:Dr|Mr|Mrs|Ms|Prof)\.\s*/gi, key: '__PROT_TITLE__' },
+    { regex: /\b(?:Chapter|Chap|Ch)\.?\s*\d+\s*(?:and|&|n|\+|,|\s+to\s+|-)\s*\d+\b/gi, key: '__PROT_CHAP__' },
+    { regex: /\be\.g\.,?\s*/gi, key: '__PROT_EG__' },
+    { regex: /\bi\.e\.,?\s*/gi, key: '__PROT_IE__' },
+    { regex: /\bvs\.\s*/gi, key: '__PROT_VS__' },
+    { regex: /\betc\.\s*/gi, key: '__PROT_ETC__' },
+    { regex: /\br\s*&\s*d\b/gi, key: '__PROT_RD__' },
+    { regex: /\bai\s*&\s*ml\b/gi, key: '__PROT_AIML__' },
+    { regex: /\bbread\s+(?:and|&|n)\s+butter\b/gi, key: '__PROT_BB__' },
+    { regex: /\bsalt\s+and\s+pepper\b/gi, key: '__PROT_SP__' },
+    { regex: /\bmac\s+and\s+cheese\b/gi, key: '__PROT_MC__' },
+    { regex: /\bmom\s+(?:and|&|n)\s+dad\b/gi, key: '__PROT_MD__' },
+    { regex: /\bmilk\s*,\s*eggs\s*,\s*(?:and\s+)?bread\b/gi, key: '__PROT_GROC1__' },
+    { regex: /\bmilk\s+eggs\s+bread\b/gi, key: '__PROT_GROC2__' },
   ]
 
   let processed = text
-    .replace(/^(?:today was horrible lol anyway|today was crazy anyway|today was exhausting anyway|anyway|anyways|so anyway|bro tmrw i gotta|tomorrow i need to|tomorrow i have to|man work was brutal today,?\s*but|remember to|don't forget to|please)\s+/i, '')
-    .trim()
   const mapping: Record<string, string> = {}
   protections.forEach((p, idx) => {
     processed = processed.replace(p.regex, (match) => {
@@ -94,22 +119,17 @@ export function splitCompoundActions(input: string): string[] {
     })
   })
 
-  // Action verbs, shorthand, and task intent markers
-  const actionVerbPattern = '(?:call|cll|phone|ring|message|email|contact|buy|purchase|order|get|pick up|grab|shop for|fetch|pay|renew|recharge|settle|study|stdy|learn|revise|review|practice|prepare|prep|research|investigate|explore|write|complete|finish|submit|solve|go to|hit the|workout|exercise|run|gym|cardio|yoga|clean|organize|wash|fix|repair|set up|pack|schedule|book|reserve|meet|see|resolve|check|chck|inspect|update|send|upload|download|compile|code|debug|test|create|draft|do|attend|need to|have to|must|remember to|don\\\'t forget to|gonna|gotta|plan to)'
+  const intentPhrases = '(?:i\\s+(?:want|need|have|must|gotta|gonna|wanna|plan)\\s+to|i\\s+(?:want|need|have|must|gotta|wanna|plan))'
+  const actionVerbPattern = '(?:call|cll|phone|ring|message|text|email|contact|buy|purchase|order|get|pick up|grab|shop for|fetch|pay|renew|recharge|settle|study|stdy|learn|revise|review|practice|research|prepare|prep|write|complete|finish|submit|solve|go to|hit the|workout|exercise|run|gym|cardio|yoga|clean|organize|wash|fix|repair|set up|pack|schedule|book|reserve|meet|see|resolve|check|chck|inspect|update|send|upload|download|compile|code|debug|test|create|draft|do|attend|need to|have to|must|remember to|don\\\'t forget to|gonna|gotta|plan to|want to|wanna)'
+  const strongActionVerbs = '(?:call|cll|phone|ring|message|text|email|buy|purchase|order|pay|renew|study|stdy|revise|prepare|prep|write|finish|complete|submit|send|upload|go to|hit the|clean|schedule|book|reserve|research)'
 
-  // Split on:
-  // 1. Semicolons
-  // 2. Sentence end (.!?) followed by space and capital letter or action verb
-  // 3. Conjunctions (and, also, then, plus, after that, comma+and) ONLY when followed by an action verb/target
-  // 4. Contrastive conjunctions (but, however)
-  // 5. Unpunctuated speech boundaries between distinct action verbs and objects (excluding auxiliary/modal prefixes)
   const smartSplitRegex = new RegExp(
     `;\\s*|` +
-    `(?<=[\\w\\)])\\.\\s+(?=[A-Z]|${actionVerbPattern}\\b)|` +
-    `,\\s*(?:and\\s+|also\\s+|then\\s+|plus\\s+)?(?=${actionVerbPattern}\\b)|` +
-    `\\s+(?:and\\s+then|and\\s+also|then|after\\s+that|plus|and)\\s+(?=${actionVerbPattern}\\b)|` +
-    `\\s+(?:but|however)\\s+|` +
-    `(?<!\\b(?:gonna|gotta|need\\s+to|have\\s+to|want\\s+to|plan\\s+to|remember\\s+to|must|to|and|also|then|but|or|so|i|we|you))(?<=[a-z0-9_])\\s+(?=(?:call\\s+(?:mom|dad|client|dentist|doctor|sarah|john)|buy\\s+|pay\\s+|send\\s+(?:that\\s+)?(?:project|file|email|report|pr)|finish\\s+|study\\s+|submit\\s+|book\\s+|schedule\\s+|go\\s+to\\s+gym|hit\\s+the\\s+gym))`,
+    `(?<=[\\w\\)])\\.\\s+(?=[A-Z]|${actionVerbPattern}\\b|${intentPhrases}\\b)|` +
+    `,\\s*(?:and\\s+|also\\s+|then\\s+|plus\\s+)?(?=${intentPhrases}\\b|${actionVerbPattern}\\b)|` +
+    `\\s+(?:and\\s+then|and\\s+also|and\\s+${intentPhrases}|and|then|after\\s+that|plus)\\s+(?=${intentPhrases}\\b|${actionVerbPattern}\\b)|` +
+    `\\s+(?=${intentPhrases}\\s+)|` +
+    `(?<!\\b(?:the|a|an|to|for|on|about|with|before|after|of|in|at|into|through|during|and|or|plus|also|my|our|their|his|her|your|this|that|these|those|gonna|gotta|wanna|will|shall|can|could|would|should|must|need|have|going|want|wants|wanted|wishing|wish|like|likes|liked|hope|trying|try|start|started|begin|began))\\s+(?=${strongActionVerbs}\\b)`,
     'gi'
   )
 
@@ -121,18 +141,16 @@ export function splitCompoundActions(input: string): string[] {
     Object.keys(mapping).forEach(k => {
       restored = restored.replace(new RegExp(k, 'g'), mapping[k])
     })
-    // Strip leading conversational connectors & filler preambles
+    // Strip leading conversational connectors & casual lead-ins
     restored = restored
-      .replace(/^(?:today was horrible lol anyway|today was crazy anyway|today was exhausting anyway|anyway|anyways|so anyway|bro tmrw i gotta|tomorrow i need to|tomorrow i have to|man work was brutal today,?\s*but|also|and|then|plus|but|so|remember to|don't forget to|please)\s+/i, '')
-      .replace(/^(?:need to|have to|must|gotta|gonna|i gotta|i need to|i have to|i want to|still need to|still have to)\s+/i, '')
+      .replace(/^(?:bro\s+tmrw\s+i\s+gotta|tmrw\s+i\s+gotta|tomorrow\s+i\s+need\s+to|tomorrow\s+i\s+gotta|tomorrow\s+i\s+want\s+to|i\s+gotta|i\s+need\s+to|i\s+want\s+to|i\s+have\s+to|i\s+wanna|also|and|then|plus|but|so|remember to|don't forget to|please)\s+/i, '')
       .trim()
-
-    if (restored.length > 1 && !/^(?:gonna|gotta|need\s+to|have\s+to|must|remember\s+to|don't\s+forget\s+to|still\s+need\s+to|want\s+to|plan\s+to)$/i.test(restored)) {
+    if (restored.length > 1 && isValidTaskText(restored)) {
       clauses.push(restored)
     }
   }
 
-  return clauses.length > 0 ? clauses : [text]
+  return clauses.length > 0 ? clauses : (isValidTaskText(text) ? [text] : [])
 }
 
 // ─── Phase 6 & 7: Deduplication and Category Grounding ───────────────────────
@@ -152,40 +170,44 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
  */
 export function groundCategory(text: string, currentCategory?: string): string {
   const lower = text.toLowerCase()
-  let bestCat = currentCategory && CATEGORY_KEYWORDS[currentCategory] ? currentCategory : 'OTHER'
-  let maxScore = 0
-
-  for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
-    let score = 0
-    for (const kw of kws) {
-      if (lower.includes(kw)) {
-        score += kw.length
-      }
-    }
-    if (score > maxScore) {
-      maxScore = score
-      bestCat = cat
+  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (keywords.some(k => new RegExp(`\\b${k}\\b`, 'i').test(lower) || lower.includes(k))) {
+      return cat
     }
   }
-
-  return bestCat
+  return currentCategory ? currentCategory.toUpperCase() : 'OTHER'
 }
 
 /**
  * Removes duplicate task intents and merges metadata.
  */
 export function deduplicateTasks(tasks: TaskItem[]): TaskItem[] {
-  const seen = new Set<string>()
+  const seen = new Map<string, TaskItem>()
   const result: TaskItem[] = []
 
-  for (const t of tasks) {
-    const norm = t.text.toLowerCase().replace(/[^a-z0-9]/g, '')
-    if (!seen.has(norm)) {
-      seen.add(norm)
-      result.push(t)
+  for (const task of tasks) {
+    // Basic normalization for intent comparison
+    const normalized = task.text.toLowerCase()
+      .replace(/^(complete|finish|revise|study|do|start|begin|go to|call|buy|need 2|need to)\s+/i, '')
+      .replace(/\s+(tonight|tomorrow|tonite|today)$/i, '')
+      .trim()
+
+    if (!seen.has(normalized)) {
+      seen.set(normalized, task)
+      result.push(task)
+    } else {
+      const existing = seen.get(normalized)!
+      // Merge metadata: keep highest urgency/importance
+      if (task.priority === 'high') existing.priority = 'high'
+      if (typeof task.urgency === 'number') {
+        existing.urgency = Math.max(existing.urgency || 0, task.urgency)
+      }
+      if (typeof task.importance === 'number') {
+        existing.importance = Math.max(existing.importance || 0, task.importance)
+      }
+      if (task.deadline && !existing.deadline) existing.deadline = task.deadline
     }
   }
-
   return result
 }
 
@@ -200,15 +222,10 @@ export function isIntentActionable(input: string): boolean {
 
   if (lower.length < 3) return false
 
-  // Standalone auxiliary / modal words
-  if (/^(?:gonna|gotta|need\s+to|have\s+to|must|remember\s+to|don't\s+forget\s+to|still\s+need\s+to|want\s+to|plan\s+to)$/i.test(lower)) {
-    return false
-  }
-
   // Pure conversational / state-of-being expressions
   const stateRegex = /^(today|man|boy|girl|phew|damn|wow|omg|gosh|i|i'm|im|just|feeling)\s+(today\s+)?(was|is|feel|feeling|am)?\s*(so\s+)?(exhausting|exhausted|tiring|tired|crazy|wild|great|rough|brutal|busy|long|hectic|good|bad|sleepy|chilling|relaxing|done for the day|heading to bed|going to sleep)/i
   if (stateRegex.test(lower)) {
-    const hasExplicitTask = /\b(need\s+to|have\s+to|must|remember\s+to|don't\s+forget|pay\s+|study\s+|call\s+|buy\s+|submit\s+|finish\s+|prep\s+|check\s+|send\s+|book\s+)\b/i.test(lower)
+    const hasExplicitTask = /\b(need\s+to|have\s+to|must|remember\s+to|don't\s+forget|pay\s+|study\s+|call\s+|buy\s+|submit\s+|finish\s+|prep\s+)\b/i.test(lower)
     if (!hasExplicitTask) {
       return false
     }
@@ -220,9 +237,9 @@ export function isIntentActionable(input: string): boolean {
   }
 
   // Past completed actions without future tasks
-  const pastRegex = /^(already\s+finished|already\s+submitted|already\s+done|already\s+paid|paid\s+the\s+.*yesterday|finished\s+my\s+|completed\s+my\s+|completed\s+the\s+|i\s+completed\s+the\s+|went\s+to\s+.*this\s+morning|just\s+finished)/i
+  const pastRegex = /^(already\s+finished|already\s+submitted|already\s+done|already\s+paid|paid\s+the\s+.*yesterday|finished\s+my\s+|completed\s+my\s+|went\s+to\s+.*this\s+morning|just\s+finished)/i
   if (pastRegex.test(lower)) {
-    const hasFuture = /\b(tomorrow|tonight|next|again|still|pending|need\s+to|have\s+to|must|don't\s+forget|remember\s+to|but|yet\s+to|before\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|midnight|\d{1,2}))\b/i.test(lower)
+    const hasFuture = /\b(tomorrow|tonight|next|again|still\s+need|need\s+to|have\s+to|must|don't\s+forget|remember\s+to)\b/i.test(lower)
     if (!hasFuture) return false
   }
 
@@ -258,35 +275,36 @@ export function normalizePriority(p: any): 'high' | 'medium' | 'low' {
 
 export function generateLocalTasks(thought: string): TaskItem[] {
   if (!thought || !thought.trim()) {
-    return [
-      { id: `task-${Date.now()}-1`, text: 'Review primary objectives', priority: 'high', duration: '15m', done: false, description: 'Morning alignment sprint' },
-      { id: `task-${Date.now()}-2`, text: 'Organize workspace', priority: 'medium', duration: '30m', done: false, description: 'Focus setup' },
-    ]
+    return []
   }
 
   const clauses = splitCompoundActions(thought).filter(isIntentActionable)
   if (clauses.length === 0) return []
 
-  const generated: TaskItem[] = clauses.map((raw, idx) => {
-    let clean = raw
-      .replace(/^[-*•\d.)\s]+/, '')
-      .replace(/^(tomorrow|need to|have to|must|should|remember to|don't forget to|i want to|plan to)\s+/i, '')
-      .trim()
+  const generated: TaskItem[] = clauses
+    .filter(raw => isValidTaskText(raw))
+    .map((raw, idx) => {
+      let clean = raw
+        .replace(/^[-*•\d.)\s]+/, '')
+        .replace(/^(tomorrow|need to|have to|must|should|remember to|don't forget to|i want to|plan to)\s+/i, '')
+        .trim()
 
-    if (!clean) clean = `Action item ${idx + 1}`
-    clean = clean.charAt(0).toUpperCase() + clean.slice(1)
+      if (!clean) clean = raw.trim()
+      clean = clean.charAt(0).toUpperCase() + clean.slice(1)
 
-    const cat = groundCategory(clean)
-    return {
-      id: `task-local-${Date.now()}-${idx}`,
-      text: clean,
-      priority: 'medium',
-      duration: '30m',
-      done: false,
-      category: cat,
-      description: `Action item: ${cat}`,
-    }
-  })
+      const cat = groundCategory(clean)
+      return {
+        id: `task-local-${Date.now()}-${idx}`,
+        text: clean,
+        priority: 'medium',
+        duration: '30m',
+        done: false,
+        category: cat,
+        description: `Action item: ${cat}`,
+        sourceClause: raw,
+        sourceText: thought,
+      }
+    })
 
   return deduplicateTasks(generated)
 }
@@ -454,8 +472,22 @@ export async function generateMission(thought: string): Promise<TaskItem[]> {
 
         console.log('PARSED_LLM_TASKS:', JSON.stringify(rawTasksList))
 
+        // Process extracted tasks and correlate with source clauses
         rawTasksList.forEach((t: any, idx: number) => {
-          const text = String(t.title || t.text || 'Action Item').trim()
+          let text = String(t.title || t.text || '').trim()
+          const matchedClause = clausesForAI[idx] || (clausesForAI.length === 1 ? clausesForAI[0] : '')
+
+          // Never accept incomplete fragments — recover full semantic text from source clause if needed
+          if (!isValidTaskText(text)) {
+            if (matchedClause && isValidTaskText(matchedClause)) {
+              text = matchedClause.trim()
+            }
+          }
+
+          if (!isValidTaskText(text)) {
+            return // Skip invalid fragment if no valid text can be recovered
+          }
+
           const category = groundCategory(text, t.category)
           const urg = typeof t.urgency === 'number' ? t.urgency : 0.5
           const imp = typeof t.importance === 'number' ? t.importance : 0.5
@@ -473,8 +505,21 @@ export async function generateMission(thought: string): Promise<TaskItem[]> {
             deadline: t.deadline || null,
             urgency: urg,
             importance: imp,
+            sourceClause: matchedClause,
+            sourceText: thought,
           })
         })
+
+        // If LLM returned fewer tasks than clauses requested, recover remaining clauses
+        if (aggregatedTasks.length < allClauses.length && rawTasksList.length < clausesForAI.length) {
+          const processedClauses = new Set(aggregatedTasks.map(t => t.sourceClause).filter(Boolean))
+          clausesForAI.forEach(clause => {
+            if (!processedClauses.has(clause)) {
+              const recovered = generateLocalTasks(clause)
+              aggregatedTasks.push(...recovered)
+            }
+          })
+        }
       } catch (inferenceErr) {
         console.warn('Batched inference failed, using deterministic local extraction:', inferenceErr)
         clausesForAI.forEach(c => aggregatedTasks.push(...generateLocalTasks(c)))

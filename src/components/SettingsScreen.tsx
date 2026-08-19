@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { AppSettings } from '../settings'
 import { DayTheme, lightDayTheme } from '../App'
-import { MODEL_CONFIG } from '../config/modelConfig'
 import { testCustomLLMConnection, notifyAIToast } from '../services/customLLMService'
 
 interface ToggleProps {
@@ -174,15 +173,15 @@ export function SettingsLocalAISection({ day }: SettingsLocalAISectionProps) {
                   color: day.green,
                 }}
               >
-                Local • Offline
+                Local AI
               </span>
             </div>
             <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: '12px', color: day.textDim, marginTop: '2px' }}>
               {isTestingAI
-                ? 'Checking local engine status…'
+                ? 'Checking status…'
                 : isModelReady
-                ? 'Model Ready • On-device native execution'
-                : aiStatus?.message || 'Model Not Ready'}
+                ? 'Model Ready & Active'
+                : aiStatus?.message || 'Model Standby'}
             </p>
           </div>
         </div>
@@ -206,29 +205,8 @@ export function SettingsLocalAISection({ day }: SettingsLocalAISectionProps) {
             transition: 'all 0.2s',
           }}
         >
-          {isTestingAI ? 'Checking…' : isModelReady ? '● Model Ready' : 'Verify Model'}
+          {isTestingAI ? 'Checking…' : isModelReady ? '● Ready' : 'Check Status'}
         </button>
-      </div>
-
-      <div className="mt-3 pt-3 flex flex-col gap-1" style={{ borderTop: `1px solid ${day.border}` }}>
-        <div className="flex items-center justify-between text-xs" style={{ color: day.textDim }}>
-          <span>Status</span>
-          <span style={{ fontWeight: 600, color: isModelReady ? day.green : day.yellow }}>
-            {isModelReady ? 'Model Ready (Loaded)' : 'Model Not Ready'}
-          </span>
-        </div>
-        <div className="flex items-center justify-between text-xs" style={{ color: day.textDim }}>
-          <span>Model Architecture</span>
-          <span style={{ fontFamily: 'monospace', color: day.text }}>SmolLM2-135M (Q5_K_M)</span>
-        </div>
-        <div className="flex items-center justify-between text-xs" style={{ color: day.textDim }}>
-          <span>Model File</span>
-          <span style={{ fontFamily: 'monospace', color: day.text }}>{MODEL_CONFIG.FILENAME}</span>
-        </div>
-        <div className="flex items-center justify-between text-xs" style={{ color: day.textDim }}>
-          <span>Engine Footprint</span>
-          <span style={{ color: day.text }}>{MODEL_CONFIG.SIZE_MB} MB on-device</span>
-        </div>
       </div>
     </div>
   )
